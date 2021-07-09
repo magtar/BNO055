@@ -1,4 +1,5 @@
-#pragma once
+#ifndef IMU_H
+#define IMU_H
 #include <mbed.h>
 #include <rtos.h>
 #include <Arduino.h>
@@ -6,17 +7,29 @@ static int IMUadd=0x28;
 static int IMUadd8=IMUadd<<1;
 using namespace mbed;
 using namespace rtos;
+
+
+static Thread IMUloop;
+static I2C *C;
+
 class imu
 {
     public:
-        imu();
-        ~imu();
-        I2C com; 
+        imu(I2C &com);
+        ~imu();         
         static constexpr int IMUadd=0x28;
         static constexpr int IMUadd8=IMUadd<<1;
+        char data[2];
+        //static I2C *C;
+        char reg;
+        static char accel [6];  
+        void start();
+        static void loop();
+        
 
     private:
 
 
         
 };
+#endif
