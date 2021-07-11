@@ -9,8 +9,7 @@ using namespace mbed;
 using namespace rtos;
 
 
-static Thread IMUloop;
-static I2C *C;
+
 
 class imu
 {

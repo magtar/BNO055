@@ -1,5 +1,6 @@
 #include "IMU.h"
-
+static Thread IMUloop;
+static I2C *C;
 imu::imu(I2C &com) //: com(PH_8,PH_7)
 {
     C=&com;
@@ -26,27 +27,27 @@ imu::imu(I2C &com) //: com(PH_8,PH_7)
     C->write(IMUadd8, data, 2, false);
     ThisThread::sleep_for(std::chrono::milliseconds(20) );
 
-    // Defaul Axis Configuration
-    data[0] = 0x41;
-    data[1] = 0x24;
-    C->write(IMUadd8, data, 2, true);
+    // // Defaul Axis Configuration
+    // data[0] = 0x41;
+    // data[1] = 0x24;
+    // C->write(IMUadd8, data, 2, true);
 
-    // Default Axis Signs
-    data[0] = 0x42;
-    data[1] = 0x00;
-    C->write(IMUadd8, data, 2, true);
+    // // Default Axis Signs
+    // data[0] = 0x42;
+    // data[1] = 0x00;
+    // C->write(IMUadd8, data, 2, true);
     
 
-    // Set units to m/s^2
-    data[0] = 0x3B;
-    data[1] = 0b0001000;
-    C->write(IMUadd8, data, 2, true);
+//    // Set units to m/s^2
+//     data[0] = 0x3B;
+//     data[1] = 0x81;
+//     C->write(IMUadd8, data, 2, true);    
+//     ThisThread::sleep_for(std::chrono::milliseconds(100) );   
+//     // Set operation to acceleration only
     
-
-    // Set operation to acceleration only
     data[0] = 0x3D;
     data[1] = 0x0C;
-    C->write(IMUadd8, data, 2, true);
+    C->write(IMUadd8, data, 2, false);
     ThisThread::sleep_for(std::chrono::milliseconds(100) );    
 
 }
@@ -68,12 +69,23 @@ void imu::start()
      
      while(1)
      {
-        Serial.print("IMUloop ");
-        char reg = 0x00;
-        //char chipID[1];
+        
+        char reg = 0x08;
+        char data[6];
+        int16_t accelX, accelY, accelZ;
         C->write(IMUadd8, &reg, 1, true);
-        ThisThread::sleep_for(std::chrono::milliseconds(1000) );
-        //C->read(IMUadd8, chipID, 1, false);    
-        ThisThread::sleep_for(std::chrono::milliseconds(500) ); 
+        ThisThread::sleep_for(std::chrono::milliseconds(10) );
+        C->read(IMUadd8, data, 6, false);    
+        accelX = ((data[1]<<8) | data[0]);
+        accelY = ((data[3]<<8) | data[2]);
+        accelZ = ((data[5]<<8) | data[4]);
+        char buff[50];
+        sprintf(buff,"%d,%d,%d,\n",accelX,accelY,accelZ);
+        Serial.print(buff);
+
+
+
+        //ThisThread::sleep_for(std::chrono::milliseconds(100) ); 
+        
      }     
  }
