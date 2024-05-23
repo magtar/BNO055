@@ -1,6 +1,9 @@
 #include "IMU.h"
 static Thread IMUloop;
 I2C * imu::C;
+rtos::Semaphore imu::ticsema(0);
+mbed::Ticker imu::tic;
+
 imu::imu(I2C &com, int mode) //: com(PH_8,PH_7)
 {
     C=&com;
@@ -45,7 +48,7 @@ imu::imu(I2C &com, int mode) //: com(PH_8,PH_7)
 
         //configure gyro
         data[0] = 0x0A;
-        data[1] = 0b00111100; //0X3C
+        data[1] = 0b00111100; //0X3C, 2 Hz Bandwidth, 125 dps res=125/2^15 ?
         C->write(IMUadd8,data,2,false);
         ThisThread::sleep_for(std::chrono::milliseconds(100) );
 
@@ -96,13 +99,16 @@ void imu::start()
 {
     //IMUloop.start(callback(loop));
     IMUloop.start(gyroloop);
+    tic.attach(ticloop,std::chrono::milliseconds(100));
 }
 
  void imu::gyroloop()
+
  {
      
      while(1)
-     {        
+     {  
+        ticsema.acquire();       
         //char reg = 0x08;//acceldata
         char reg = 0x14;//gyrodata
         char data[6];
@@ -120,4 +126,9 @@ void imu::start()
         //ThisThread::sleep_for(std::chrono::milliseconds(100) ); 
         
      }     
+ }
+
+ void imu::ticloop()
+ {
+    ticsema.release();
  }

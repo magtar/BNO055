@@ -24,6 +24,9 @@ class imu
         //static char accel [6];  
         void start();
         static void gyroloop();
+        static mbed::Ticker tic;
+        static void ticloop();
+        static Semaphore ticsema;
         
 
     private:
