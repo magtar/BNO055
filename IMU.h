@@ -14,21 +14,21 @@ using namespace rtos;
 class imu
 {
     public:
-        imu(I2C &com);
+        imu(I2C &com, int);
         ~imu();         
         static constexpr int IMUadd=0x28;
         static constexpr int IMUadd8=IMUadd<<1;
         char data[2];
-        //static I2C *C;
+        static I2C *C;
         char reg;
-        static char accel [6];  
+        //static char accel [6];  
         void start();
-        static void loop();
+        static void gyroloop();
         
 
     private:
-
-
+        enum mode {rate, accel, mag};
+        
         
 };
 #endif
