@@ -3,10 +3,21 @@ static Thread IMUloop;
 I2C * imu::C;
 rtos::Semaphore imu::ticsema(0);
 mbed::Ticker imu::tic;
+char imu::cmd[2]={0x00,0x00};
+const char imu::gyro=(0x14);
+const char imu::ndof=(0x20);
+char imu::data[8];//={0,0,0,0,0,0};
+
+int16_t imu::accelX; 
+int16_t imu::accelY;
+int16_t imu::accelZ;
+int16_t imu::gyrorate[3];
+int16_t imu::quat[4];
 
 imu::imu(I2C &com, int mode) //: com(PH_8,PH_7)
 {
     C=&com;
+    _mode=mode;
     char reg = 0x00;
     char chipID[1];
     C->write(IMUadd8, &reg, 1, true);
@@ -14,79 +25,68 @@ imu::imu(I2C &com, int mode) //: com(PH_8,PH_7)
     C->read(IMUadd8, chipID, 1, false);    
     
     //set to config mode
-    data[0]= 0x3D;
-    data[1]= 0x00;
-    C->write(IMUadd8,data,2,false);
+    cmd[0]= 0x3D;
+    cmd[1]= 0x00;
+    C->write(IMUadd8,cmd,2,false);
     ThisThread::sleep_for(std::chrono::milliseconds(7));
 
     //Use internal osc
-    data[0] = 0x3F;
-    data[1] = 0x80;
-    C->write(IMUadd8,data,2, false);
+    cmd[0] = 0x3F;
+    cmd[1] = 0x80;
+    C->write(IMUadd8,cmd,2, false);
     ThisThread::sleep_for(std::chrono::milliseconds(20) );
 
     // Reset all interrupt status bits
-    data[0] = 0x3F;
-    data[1] = 0x01;
-    C->write(IMUadd8, data, 2, false);
+    cmd[0] = 0x3F;
+    cmd[1] = 0x01;
+    C->write(IMUadd8, cmd, 2, false);
 
     // Configure Power Mode
-    data[0] = 0x3E;
-    data[1] = 0x00;
-    C->write(IMUadd8, data, 2, false);
+    cmd[0] = 0x3E;
+    cmd[1] = 0x00;
+    C->write(IMUadd8, cmd, 2, false);
     ThisThread::sleep_for(std::chrono::milliseconds(20) );
 
     // gyro: mode=0.
-    if(mode==rate)
+    if(_mode==rate)
     {
         //change to page 1
-        data[0] = 0x07;
-        data[1] = 0x01;
-        C->write(IMUadd8,data,2,false);
+        cmd[0] = 0x07;
+        cmd[1] = 0x01;
+        C->write(IMUadd8,cmd,2,false);
         ThisThread::sleep_for(std::chrono::milliseconds(100) );    
 
-
         //configure gyro
-        data[0] = 0x0A;
-        data[1] = 0b00111100; //0X3C, 2 Hz Bandwidth, 125 dps res=125/2^15 ?
-        C->write(IMUadd8,data,2,false);
+        cmd[0] = 0x0A;
+        cmd[1] = 0b00111100; //0X3C, 2 Hz Bandwidth, 125 dps res=125/2^15 ?
+        C->write(IMUadd8,cmd,2,false);
         ThisThread::sleep_for(std::chrono::milliseconds(100) );
-
         
         //change to page 0
-        data[0] = 0x07;
-        data[1] = 0x00;
-        C->write(IMUadd8,data,2,false);
+        cmd[0] = 0x07;
+        cmd[1] = 0x00;
+        C->write(IMUadd8,cmd,2,false);
         ThisThread::sleep_for(std::chrono::milliseconds(100) );  
 
         //enable  gyro only mode
-        data[0] = 0x3D;
-        //data[1] = 0x0C; //NDOF
-        //data[1] = 0x01; //ACCEL Only
-        data[1] = 0x03; //gyro only
-        C->write(IMUadd8, data, 2, false);
+        cmd[0] = 0x3D;
+        //cmd[1] = 0x0C; //NDOF
+        //cmd[1] = 0x01; //ACCEL Only
+        
+        cmd[1] = 0x03; //gyro only
+        C->write(IMUadd8, cmd, 2, false);
         ThisThread::sleep_for(std::chrono::milliseconds(100) );    
     }
 
-    
-    // // Defaul Axis Configuration
-    // data[0] = 0x41;
-    // data[1] = 0x24;
-    // C->write(IMUadd8, data, 2, true);
-
-    // // Default Axis Signs
-    // data[0] = 0x42;
-    // data[1] = 0x00;
-    // C->write(IMUadd8, data, 2, true);
-    
-
-//    // Set units to m/s^2
-//     data[0] = 0x3B;
-//     data[1] = 0x81;
-//     C->write(IMUadd8, data, 2, true);    
-//     ThisThread::sleep_for(std::chrono::milliseconds(100) );   
-//     // Set operation to acceleration only   
-    
+    else if(_mode==NDOF)
+    {
+        cmd[0] = 0x3D;
+        cmd[1] = 0x0C; //NDOF
+        //cmd[1] = 0x01; //ACCEL Only        
+        //cmd[1] = 0x03; //gyro only
+        C->write(IMUadd8, cmd, 2, false);
+        ThisThread::sleep_for(std::chrono::milliseconds(100) );    
+    }      
 }
 
 imu::~imu()
@@ -98,37 +98,76 @@ imu::~imu()
 void imu::start()
 {
     //IMUloop.start(callback(loop));
-    IMUloop.start(gyroloop);
-    tic.attach(ticloop,std::chrono::milliseconds(100));
+    if(_mode==rate)
+    {
+        IMUloop.start(gyroloop);
+        tic.attach(ticloop,std::chrono::milliseconds(100));        
+    }
+    else if(_mode==NDOF)
+    {
+        IMUloop.start(NDOFloop);
+        tic.attach(ticloop,std::chrono::milliseconds(100));
+    }
 }
 
  void imu::gyroloop()
-
- {
-     
+ {     
      while(1)
      {  
         ticsema.acquire();       
         //char reg = 0x08;//acceldata
-        char reg = 0x14;//gyrodata
-        char data[6];
-        int16_t accelX, accelY, accelZ;
-        C->write(IMUadd8, &reg, 1, true);
+        //char reg = 0x14;//gyrodata        
+        //char data[6];
+      
+        C->write(IMUadd8, &gyro, 1, true);
         ThisThread::sleep_for(std::chrono::milliseconds(10) );
-        C->read(IMUadd8, data, 6, false);    
-        accelX = ((data[1]<<8) | data[0]);
-        accelY = ((data[3]<<8) | data[2]);
-        accelZ = ((data[5]<<8) | data[4]);
-        char buff[50];
-        sprintf(buff,"%d,%d,%d,\n",accelX,accelY,accelZ);
-        Serial.print(buff);
+        C->read(IMUadd8, data, 6, false);
+  
+        gyrorate[0]=((data[1]<<8) | data[0]);
+        gyrorate[1]=((data[3]<<8) | data[2]);
+        gyrorate[2]=((data[5]<<8) | data[4]);            
 
-        //ThisThread::sleep_for(std::chrono::milliseconds(100) ); 
-        
+        char buff[50];
+        sprintf(buff,"%d,%d,%d,\n",gyrorate[0],gyrorate[1],gyrorate[2]);
+        Serial.print(buff);
+        //ThisThread::sleep_for(std::chrono::milliseconds(100) );        
      }     
+ }
+
+
+ void imu::NDOFloop()
+ {
+    while(1)
+    {
+        ticsema.acquire();
+        C->write(IMUadd8, &ndof, 1, true);
+        ThisThread::sleep_for(std::chrono::milliseconds(10) );
+        C->read(IMUadd8, data, 8, false);    
+                  
+        quat[0]=((data[1]<<8) | data[0]);
+        quat[1]=((data[3]<<8) | data[2]);
+        quat[2]=((data[5]<<8) | data[4]); 
+        quat[3]=((data[7]<<8) | data[6]);  
+       
+        for(int i=0;i<4;i++)
+        {
+            Serial.print(quat[i]);
+            Serial.print(',');
+            if(i==3)
+            {            
+                Serial.println();
+            }
+        }        //ThisThread::sleep_for(std::chrono::milliseconds(100) ); 
+ 
+    }
  }
 
  void imu::ticloop()
  {
     ticsema.release();
+ }
+
+ void imu::get()
+ {
+
  }
