@@ -18,17 +18,20 @@ imu::imu(I2C &com, int mode) //: com(PH_8,PH_7)
 {
     C=&com;
     _mode=mode;
+
+    ThisThread::sleep_for(std::chrono::milliseconds(2000) );
+
     char reg = 0x00;
     char chipID[1];
     C->write(IMUadd8, &reg, 1, true);
-    ThisThread::sleep_for(std::chrono::milliseconds(1000) );
+    ThisThread::sleep_for(std::chrono::milliseconds(2000) );
     C->read(IMUadd8, chipID, 1, false);    
     
     //set to config mode
     cmd[0]= 0x3D;
     cmd[1]= 0x00;
     C->write(IMUadd8,cmd,2,false);
-    ThisThread::sleep_for(std::chrono::milliseconds(7));
+    ThisThread::sleep_for(std::chrono::milliseconds(17));
 
     //Use internal osc
     cmd[0] = 0x3F;
@@ -50,42 +53,63 @@ imu::imu(I2C &com, int mode) //: com(PH_8,PH_7)
     // gyro: mode=0.
     if(_mode==rate)
     {
-        //change to page 1
-        cmd[0] = 0x07;
-        cmd[1] = 0x01;
-        C->write(IMUadd8,cmd,2,false);
-        ThisThread::sleep_for(std::chrono::milliseconds(100) );    
-
-        //configure gyro
-        cmd[0] = 0x0A;
-        cmd[1] = 0b00111100; //0X3C, 2 Hz Bandwidth, 125 dps res=125/2^15 ?
-        C->write(IMUadd8,cmd,2,false);
-        ThisThread::sleep_for(std::chrono::milliseconds(100) );
         
-        //change to page 0
-        cmd[0] = 0x07;
-        cmd[1] = 0x00;
-        C->write(IMUadd8,cmd,2,false);
-        ThisThread::sleep_for(std::chrono::milliseconds(100) );  
+        char bnMode=0x00;
+        char modeadd=0x3D;
+        C->write(IMUadd8,&modeadd,1,false);
+        ThisThread::sleep_for(std::chrono::milliseconds(100) );   
+        C->read(IMUadd8,&bnMode,1,false); 
+        while(bnMode!=0x03) //need this loop to force the imu into the prescribed mode
+        {
+            //enable  gyro only mode
+                //change to page 1
+            cmd[0] = 0x07;
+            cmd[1] = 0x01;
+            C->write(IMUadd8,cmd,2,false);
+            ThisThread::sleep_for(std::chrono::milliseconds(100) );    
 
-        //enable  gyro only mode
-        cmd[0] = 0x3D;
-        //cmd[1] = 0x0C; //NDOF
-        //cmd[1] = 0x01; //ACCEL Only
-        
-        cmd[1] = 0x03; //gyro only
-        C->write(IMUadd8, cmd, 2, false);
-        ThisThread::sleep_for(std::chrono::milliseconds(100) );    
+            //configure gyro
+            cmd[0] = 0x0A;
+            cmd[1] = 0b00111100; //0X3C, 2 Hz Bandwidth, 125 dps res=125/2^15 ?
+            C->write(IMUadd8,cmd,2,false);
+            ThisThread::sleep_for(std::chrono::milliseconds(100) );
+            
+            //change to page 0
+            cmd[0] = 0x07;
+            cmd[1] = 0x00;
+            C->write(IMUadd8,cmd,2,false);
+            ThisThread::sleep_for(std::chrono::milliseconds(100) );  
+
+            cmd[0] = 0x3D;       
+            cmd[1] = 0x03; //gyro only
+            C->write(IMUadd8, cmd, 2, false);
+            ThisThread::sleep_for(std::chrono::milliseconds(100) ); 
+            C->write(IMUadd8,&modeadd,1,false);
+            ThisThread::sleep_for(std::chrono::milliseconds(100) );   
+            C->read(IMUadd8,&bnMode,1,false);  
+        }   
     }
 
     else if(_mode==NDOF)
     {
-        cmd[0] = 0x3D;
-        cmd[1] = 0x0C; //NDOF
-        //cmd[1] = 0x01; //ACCEL Only        
-        //cmd[1] = 0x03; //gyro only
-        C->write(IMUadd8, cmd, 2, false);
-        ThisThread::sleep_for(std::chrono::milliseconds(100) );    
+        char bnMode=0x00;
+        char modeadd=0x3D;
+        C->write(IMUadd8,&modeadd,1,false);
+        ThisThread::sleep_for(std::chrono::milliseconds(100) );   
+        C->read(IMUadd8,&bnMode,1,false); 
+
+        while(bnMode!=0x0C) //need this loop to force the imu into the prescribed mode
+        {
+            cmd[0] = 0x3D;
+            cmd[1] = 0x0C; //NDOF
+            C->write(IMUadd8, cmd, 2, false);
+            ThisThread::sleep_for(std::chrono::milliseconds(200) ); 
+            C->write(IMUadd8,&modeadd,1,false);
+            ThisThread::sleep_for(std::chrono::milliseconds(100) );   
+            C->read(IMUadd8,&bnMode,1,false);  
+
+        }       
+
     }      
 }
 
